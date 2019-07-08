@@ -2,7 +2,7 @@ import gym
 import gym_colonizer
 
 
-def random_agent(episodes=100):
+def random_agent(episodes=10000):
 	env = gym.make("Colonizer-v0")
 	env.reset()
 	env.render()
