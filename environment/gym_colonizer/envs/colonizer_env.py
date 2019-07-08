@@ -10,6 +10,12 @@ from gym_colonizer.envs.colors import Colors
 import time
 
 BUBBLE_RADIUS = 20
+CORN = "Corn"
+WOOD = "Wood"
+SHEEP = "Sheep"
+CLAY = "Clay"
+IRON = "Iron"
+DESERT = "Desert"
 
 
 class dotdict(dict):
@@ -19,11 +25,36 @@ class dotdict(dict):
     __delattr__ = dict.__delitem__
 
 
+def get_color(res):
+    res_color_dict = {
+        CORN: Colors.yellow(),
+        WOOD: Colors.green(),
+        SHEEP: Colors.white(),
+        CLAY: Colors.orange(),
+        IRON: Colors.gray(),
+        DESERT: Colors.black()
+    }
+    return res_color_dict.get(res, "Invalid resource!")
+
+
+def get_resources(shuffle=True):
+    resources = []
+    for i in range(4):
+        resources.append(WOOD)
+        resources.append(SHEEP)
+        resources.append(CORN)
+    for i in range(3):
+        resources.append(IRON)
+        resources.append(CLAY)
+
+    if shuffle: random.shuffle(resources)
+    return resources
+
 class Spot():
     def __init__(self, x, y):
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 5
-        self.color = Colors.gray()
+        self.color = Colors.light_gray()
         self.id = uuid.uuid1()
         self.close_resource = []
         self.close_road = []
@@ -34,13 +65,14 @@ class Spot():
 
 
 class Resource():
-    def __init__(self, x, y,number):
+    def __init__(self, x, y,number,resource):
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 5
-        self.color = Colors.yellow()
         self.id = uuid.uuid1()
         self.close_spot = []
         self.number = number
+        self.resource = resource
+        self.color = get_color(self.resource)
 
     def draw(self, pygame, screen):
         pygame.gfxdraw.filled_circle(screen, round(
@@ -69,22 +101,9 @@ class ColonizerEnv(gym.Env):
     metadata = {'render.modes': ['human', 'console'],
                 'video.frames_per_second': 350}
 
-    gray = (100, 100, 100)
-    white = (255, 255, 255)
-    red = (255, 0, 0)
-    green = (0, 255, 0)
-    blue = (0, 0, 255)
-    yellow = (255, 255, 0)
-    orange = (255, 128, 0)
-    purple = (255, 0, 255)
-    cyan = (0, 255, 255)
-    black = (0, 0, 0)
-
-    colors = [red, green, blue, yellow, orange, purple, cyan]
-
     def __init__(self):
-        self.window_height = 1000
-        self.window_width = 1000
+        self.window_height = 700
+        self.window_width = 700
         self.reset()
         self.spots = {}
         self.roads = {}
@@ -93,15 +112,18 @@ class ColonizerEnv(gym.Env):
         self.initMap()
 
     def initMap(self):
+        self.add_spots()
+        self.add_roads_and_resources()
+        self.add_relations()
 
-        distance = 20
+    def add_spots(self):
+        mid_y = self.window_height/1.3
+        mid_x = self.window_width/3.5
 
-        amount = 4
-        mid_y = self.window_height/1.5
         size = 80
-        mid_x = self.window_width/2.5
-        switch = False
+        distance = 20
         height = 13
+        amount = 4
 
         for y in range(1, height):
             if(y % 2 == 0):
@@ -117,8 +139,11 @@ class ColonizerEnv(gym.Env):
                 s = Spot(mid_x+x*size, mid_y-y*(size-10)/2)
                 self.spots[s.id] = s
 
+    def add_roads_and_resources(self):
         used_positions = []
         numbers = [2,3,3,4,4,5,5,6,6,7,8,8,9,9,10,10,11,11,12]
+        resources = get_resources()
+        
         random.shuffle(numbers)
         for ks1 in self.spots:
             s1 = self.spots[ks1]
@@ -137,10 +162,15 @@ class ColonizerEnv(gym.Env):
                         self.roads[road.id] = road
                         used_positions.append([x,y])
                     if dist == 105:
-                        resource = Resource(x,y,numbers.pop())
+                        n = numbers.pop()
+                        if n == 7:
+                            resource = Resource(x,y,n,DESERT)
+                        else:
+                            resource = Resource(x,y,n,resources.pop())
                         self.resources[resource.id]=resource
                         used_positions.append([x,y])
-
+    
+    def add_relations(self):
         # relation between spots and resources
         for s in self.spots:
             spot = self.spots[s]
@@ -162,10 +192,6 @@ class ColonizerEnv(gym.Env):
                     self.spots[s].close_road.append(road.id)
                     self.roads[r].close_spot.append(spot.id)
                     self.lines.append([int(spot.pos.x),int(spot.pos.y),int(road.pos.x),int(road.pos.y)])
-    
-        print('resources',len(self.resources))
-        print('roads',len(self.roads))
-        print('used_positions',len(used_positions))        
 
     def reset(self):
         self.screen = None
