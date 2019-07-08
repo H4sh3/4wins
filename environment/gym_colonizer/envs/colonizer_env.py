@@ -1,21 +1,12 @@
 import gym
-import numpy as np
-import copy
 import random
-import math
-from math import sqrt, pow
-from gym import spaces, error
+
+from gym_colonizer.envs.field_types import CORN, WOOD, SHEEP, CLAY, IRON, DESERT
+from math import sqrt
+from gym import  error
 import uuid
 from gym_colonizer.envs.colors import Colors
-import time
-
-BUBBLE_RADIUS = 20
-CORN = "Corn"
-WOOD = "Wood"
-SHEEP = "Sheep"
-CLAY = "Clay"
-IRON = "Iron"
-DESERT = "Desert"
+from gym_colonizer.envs.field_types import WOOD, CLAY, CORN, DESERT, IRON,SHEEP
 
 
 class dotdict(dict):
@@ -80,7 +71,7 @@ class Resource():
     
         font = pygame.font.SysFont("arial", 25)
         text = font.render(str(self.number), 3, (0, 0, 255))
-        screen.blit(text, (self.pos.x, self.pos.y))
+        screen.blit(text, (self.pos.x-10, self.pos.y-10))
 
 
 class Road():
@@ -165,7 +156,7 @@ class ColonizerEnv(gym.Env):
                     if dist == 105:
                         n = numbers.pop()
                         if n == 7:
-                            resource = Resource(x,y,n,DESERT)
+                            resource = Resource(x, y, n, DESERT)
                         else:
                             resource = Resource(x,y,n,resources.pop())
                         self.resources[resource.id]=resource
@@ -227,3 +218,5 @@ class ColonizerEnv(gym.Env):
 
         else:
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
+
+    def get_state(self):

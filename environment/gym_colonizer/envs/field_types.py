@@ -1,0 +1,6 @@
+CORN = "Corn"
+WOOD = "Wood"
+SHEEP = "Sheep"
+CLAY = "Clay"
+IRON = "Iron"
+DESERT = "Desert"
