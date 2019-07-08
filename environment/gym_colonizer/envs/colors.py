@@ -1,4 +1,6 @@
 class Colors:
+    def light_gray():
+        return (225, 227, 230)
     def gray():
         return (100, 100, 100)
     def white():
