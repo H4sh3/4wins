@@ -67,7 +67,7 @@ class Spot():
 class Resource():
     def __init__(self, x, y,number,resource):
         self.pos = dotdict({'x': x, 'y': y})
-        self.radius = 5
+        self.radius = 25
         self.id = uuid.uuid1()
         self.close_spot = []
         self.number = number
@@ -84,16 +84,15 @@ class Resource():
 
 
 class Road():
-    def __init__(self, x, y):
-        self.pos = dotdict({'x': x, 'y': y})
+    def __init__(self, x1, y1 ,x2,y2,s1_id,s2_id):
+        self.pos = dotdict({'x1': int(x1), 'y1': int(y1),'x2': int(x2), 'y2': int(y2)})
         self.radius = 3
         self.color = (100, 200, 100)
         self.id = uuid.uuid1()
-        self.close_spot = []
+        self.close_spot = [s1_id,s2_id]
 
     def draw(self, pygame, screen):
-        pygame.gfxdraw.filled_circle(screen, round(
-            self.pos.x), round(self.pos.y), self.radius, self.color)
+        pygame.gfxdraw.line(screen, *self.pos.values() , self.color)
 
 
 class ColonizerEnv(gym.Env):
@@ -145,10 +144,10 @@ class ColonizerEnv(gym.Env):
         resources = get_resources()
         
         random.shuffle(numbers)
-        for ks1 in self.spots:
-            s1 = self.spots[ks1]
-            for ks2 in self.spots:
-                s2 = self.spots[ks2]
+        for key_s1 in self.spots:
+            s1 = self.spots[key_s1]
+            for key_s2 in self.spots:
+                s2 = self.spots[key_s2]
                 if s1 == s2: continue
                 else:
                     dist = round(sqrt((s2.pos.x - s1.pos.x) **
@@ -157,10 +156,12 @@ class ColonizerEnv(gym.Env):
                     y = (s1.pos.y+s2.pos.y)/2
                     if [x,y] in used_positions: continue
 
-                    if dist == 53 or dist == 35:
-                        road = Road(x, y)
+                    if dist == 53 or dist == 35: # add roads
+                        road = Road(s1.pos.x, s1.pos.y, s2.pos.x,s2.pos.y,s1.id,s2.id)
                         self.roads[road.id] = road
                         used_positions.append([x,y])
+
+
                     if dist == 105:
                         n = numbers.pop()
                         if n == 7:
@@ -182,16 +183,6 @@ class ColonizerEnv(gym.Env):
                     self.resources[r].close_spot.append(spot.id)
                     self.lines.append([int(spot.pos.x),int(spot.pos.y),int(res.pos.x),int(res.pos.y)])
 
-        # relation between spots and roads
-        for s in self.spots:
-            spot = self.spots[s]
-            for r in self.roads:
-                road = self.roads[r]
-                dist = round(sqrt((spot.pos.x - road.pos.x) ** 2 + (spot.pos.y - road.pos.y)**2))
-                if dist == 27 or dist == 18:
-                    self.spots[s].close_road.append(road.id)
-                    self.roads[r].close_spot.append(spot.id)
-                    self.lines.append([int(spot.pos.x),int(spot.pos.y),int(road.pos.x),int(road.pos.y)])
 
     def reset(self):
         self.screen = None
