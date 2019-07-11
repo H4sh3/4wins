@@ -78,7 +78,6 @@ class Resource():
         self.rating = rating
         self.resource = resource
         self.color = get_color(self.resource)
-        print(self.color)
 
     def draw(self, pygame, screen):
         pygame.gfxdraw.filled_circle(screen, round(
@@ -161,7 +160,6 @@ class ColonizerEnv(gym.Env):
         resources = get_resources()
 
         random.shuffle(rating)
-        print('312 ', len(self.spots))
         for key_s1 in self.spots:
             s1 = self.spots[key_s1]
             for key_s2 in self.spots:
@@ -185,7 +183,6 @@ class ColonizerEnv(gym.Env):
 
                     # Resources
                     if dist == 105:
-                        print(len(rating))
                         r = rating.pop()
                         if r == 7:
                             resource = Resource(x, y, r, DESERT)
@@ -260,18 +257,7 @@ class ColonizerEnv(gym.Env):
         for key in self.spots.keys():
             if cnt == action:
                 if self.spots[key].set_owner(1):
-                    # worked
-                    #print('legal move')
                     return 10  # return reward based on surrounding resources rating
                 else:
-                    #print('illegal move')
-                    # illegal action
                     return -1
             cnt += 1
-#
-        #d1 = random.randint(1,6)
-        #d2 = random.randint(1,6)
-#
-        #n = d1+d2
-        # print('dice',n)
-#
