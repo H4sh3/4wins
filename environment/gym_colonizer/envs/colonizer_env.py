@@ -1,11 +1,13 @@
 import gym
 import random
+import torch
+
 
 from gym_colonizer.envs.field_types import CORN, WOOD, SHEEP, CLAY, IRON, DESERT
 from math import sqrt
 from gym import  error
 import uuid
-from gym_colonizer.envs.colors import Colors
+from gym_colonizer.envs.colors import *
 from gym_colonizer.envs.field_types import WOOD, CLAY, CORN, DESERT, IRON,SHEEP
 
 
@@ -18,12 +20,12 @@ class dotdict(dict):
 
 def get_color(res):
     res_color_dict = {
-        CORN: Colors.yellow(),
-        WOOD: Colors.green(),
-        SHEEP: Colors.white(),
-        CLAY: Colors.orange(),
-        IRON: Colors.gray(),
-        DESERT: Colors.black()
+        CORN: YELLOW,
+        WOOD: GREEN,
+        SHEEP: WHITE,
+        CLAY: ORANGE,
+        IRON: GRAY,
+        DESERT: BLACK
     }
     return res_color_dict.get(res, "Invalid resource!")
 
@@ -45,23 +47,34 @@ class Spot():
     def __init__(self, x, y):
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 5
-        self.color = Colors.light_gray()
+        self.color = LIGHT_GRAY
         self.id = uuid.uuid1()
         self.close_resource = []
         self.close_road = []
+        self.owner = 0
+    
+    def set_owner(self,owner):
+        if self.owner is 0:
+            self.owner = owner
+            if owner == 1:
+                self.color = RED
+            return True
+        else:
+            return False
 
     def draw(self, pygame, screen):
-        pygame.gfxdraw.filled_circle(screen, round(
-            self.pos.x), round(self.pos.y), self.radius, self.color)
+        print('draw')
+        #pygame.gfxdraw.filled_circle(screen, round(
+        #    self.pos.x), round(self.pos.y), self.radius, self.color)
 
 
 class Resource():
-    def __init__(self, x, y,number,resource):
+    def __init__(self, x, y,rating,resource):
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 25
         self.id = uuid.uuid1()
         self.close_spot = []
-        self.number = number
+        self.rating = rating
         self.resource = resource
         self.color = get_color(self.resource)
 
@@ -92,14 +105,23 @@ class ColonizerEnv(gym.Env):
                 'video.frames_per_second': 350}
 
     def __init__(self):
-        self.window_height = 700
-        self.window_width = 700
-        self.reset()
+        self.window_height = 500
+        self.window_width = 500
         self.spots = {}
         self.roads = {}
         self.resources = {}
         self.lines = []
         self.initMap()
+
+    def get_state(self):
+        state = []
+        for r in self.resources:
+            state.append(self.resources[r].number)
+
+        for s in self.spots:
+            state.append(self.spots[s].owner)
+
+        return state
 
     def initMap(self):
         self.add_spots()
@@ -107,8 +129,8 @@ class ColonizerEnv(gym.Env):
         self.add_relations()
 
     def add_spots(self):
-        mid_y = self.window_height/1.3
-        mid_x = self.window_width/3.5
+        mid_y = self.window_height/1.1
+        mid_x = self.window_width/4.5
 
         size = 80
         distance = 20
@@ -131,10 +153,12 @@ class ColonizerEnv(gym.Env):
 
     def add_roads_and_resources(self):
         used_positions = []
-        numbers = [2,3,3,4,4,5,5,6,6,7,8,8,9,9,10,10,11,11,12]
+        
+        rating = [2,3,3,4,4,5,5,6,6,7,8,8,9,9,10,10,11,11,12]
         resources = get_resources()
         
-        random.shuffle(numbers)
+        random.shuffle(rating)
+        print('312 ',len(self.spots))
         for key_s1 in self.spots:
             s1 = self.spots[key_s1]
             for key_s2 in self.spots:
@@ -147,18 +171,22 @@ class ColonizerEnv(gym.Env):
                     y = (s1.pos.y+s2.pos.y)/2
                     if [x,y] in used_positions: continue
 
-                    if dist == 53 or dist == 35: # add roads
+                    # Roads
+                    if dist == 53 or dist == 35:
                         road = Road(s1.pos.x, s1.pos.y, s2.pos.x,s2.pos.y,s1.id,s2.id)
                         self.roads[road.id] = road
                         used_positions.append([x,y])
 
-
+                    # Resources
                     if dist == 105:
-                        n = numbers.pop()
+                        print(len(rating))
+                        #n = rating.pop()
+                        n = 1
                         if n == 7:
                             resource = Resource(x, y, n, DESERT)
                         else:
-                            resource = Resource(x,y,n,resources.pop())
+                            #resource = Resource(x,y,n,rating.pop())
+                            resource = Resource(x,y,n,6)
                         self.resources[resource.id]=resource
                         used_positions.append([x,y])
     
@@ -177,6 +205,10 @@ class ColonizerEnv(gym.Env):
 
     def reset(self):
         self.screen = None
+        self.spots = {}
+        self.roads = {}
+        self.resources = {}
+        self.initMap()
 
     def render(self, mode='human', close=False):
         """
@@ -203,7 +235,7 @@ class ColonizerEnv(gym.Env):
 
                 self.screen.fill((255, 255, 255))
                 for line in self.lines:
-                    pygame.gfxdraw.line(self.screen, *line,Colors.black())
+                    pygame.gfxdraw.line(self.screen, *line,BLACK)
                 for key in self.resources:
                     self.resources[key].draw(pygame, self.screen)
 
@@ -213,10 +245,28 @@ class ColonizerEnv(gym.Env):
                 for key in self.roads:
                     self.roads[key].draw(pygame, self.screen)
 
-
                 pygame.display.update()
 
         else:
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
-    def get_state(self):
+    def step(self,action):
+        cnt = 0
+        for key in self.spots.keys():
+            if cnt == action:
+                if self.spots[key].set_owner(1):
+                    # worked
+                    #print('legal move')
+                    return 10 # return reward based on surrounding resources rating
+                else:
+                    #print('illegal move')
+                    # illegal action
+                    return -1
+            cnt+=1
+#
+        #d1 = random.randint(1,6)
+        #d2 = random.randint(1,6)
+#
+        #n = d1+d2
+        #print('dice',n)
+#

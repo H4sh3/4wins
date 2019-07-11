@@ -1,53 +1,69 @@
-
+import random
+import math
+from collections import namedtuple
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from configs import *
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class Net(nn.Module):
+# Code taken from https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 
-    def __init__(self):
-        super(Net, self).__init__()
-        # 1 input image channel, 6 output channels, 3x3 square convolution
-        # kernel
-        self.conv1 = nn.Conv2d(1, 6, 3)
-        self.conv2 = nn.Conv2d(6, 16, 3)
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(16 * 6 * 6, 120)  # 6*6 from image dimension
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
 
+Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
+
+
+class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        """Saves a transition."""
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+
+class DQN(nn.Module):
+    def __init__(self, input_layer, outputs):
+        super(DQN, self).__init__()
+        hidden_layer = 256
+        #self.model = nn.Sequential(nn.Linear(input_layer, hidden_layer),
+        #             nn.ReLU(),
+        #             nn.Linear(hidden_layer, outputs),
+        #             nn.Sigmoid())
+        self.model = nn.Sequential(nn.Linear(input_layer, hidden_layer),
+                     nn.ReLU(),
+                     nn.Linear(hidden_layer, outputs))
+
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        # Max pooling over a (2, 2) window
-        print(x)
-        #x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-        # If the size is a square you can only specify a single number
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-        x = x.view(-1, self.num_flat_features(x))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        return self.model(x)
 
-    def num_flat_features(self, x):
-        size = x.size()[1:]  # all dimensions except the batch dimension
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
-
-
-net = Net()
-print(net)
-
-params = list(net.parameters())
-print('len(params)',len(params))
-print('params[0].size()',params[0].size())  # conv1's .weight
-
-input = torch.randn(1, 1, 32, 32)
-print('input',input)
-print('len input',len(input[0][0]))
-out = net(input)
-print('out',out)
+def select_action(device, state, n_actions, steps_done, policy_net):
+    sample = np.random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(
+        -1.0 * steps_done / EPS_DECAY
+    )
+    steps_done += 1
+    if sample > eps_threshold:
+        with torch.no_grad():
+            # t.max(1) will return largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            return policy_net(state).max(1)[1].view(1, 1)
+    else:
+        return torch.tensor(
+            [[random.randrange(n_actions)]], device=device, dtype=torch.long
+        )
