@@ -252,11 +252,21 @@ class ColonizerEnv(gym.Env):
         else:
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
+    def get_rating(self,key):
+        spot = self.spots.get(key)
+        rating = 0
+        for x in spot.close_resource:
+            rating += self.resources[x].rating
+        return rating # add this to all spots
+
+
+
     def step(self, action):
         cnt = 0
         for key in self.spots.keys():
             if cnt == action:
                 if self.spots[key].set_owner(1):
+                    self.get_rating(key)
                     return 10  # return reward based on surrounding resources rating
                 else:
                     return -1
