@@ -109,12 +109,21 @@ if __name__ == "__main__":
     env.reset()
     env.render()
     buffer = ReplayMemory(10000)
-    num_episodes = 100
-    num_steps = 50
+    num_episodes = 1000
+    num_steps = 7
     rewards = []
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    Ln, = ax.plot(rewards)
+    ax.set_ylim([0,50])
+    plt.ion()
+    plt.show()    
+
     for i in range(num_episodes):
         env.reset()
         rewards.append(0)
+        reward = 0
         for t in range(num_steps):
             env.render()
             state = env.get_state()
@@ -129,12 +138,15 @@ if __name__ == "__main__":
             reward = env.step(action.item())
             rewards[i] += reward
 
-            reward = torch.FloatTensor([reward]).view(1, 1)
+            reward_t = torch.FloatTensor([reward]).view(1, 1)
             
             next_state = torch.FloatTensor([env.get_state()]) - last_state
-            buffer.push((state, torch.LongTensor([[action]]), next_state, reward))
+            buffer.push((state, torch.LongTensor([[action]]), next_state, reward_t))
             # Replay memory
             optimize_model(buffer, 128)
-        plt.plot(rewards, label='linear')
-        plt.pause(0.005)
-plt.show()
+        ax.set_xlim([0,len(rewards)])
+        Ln.set_ydata(rewards)
+        Ln.set_xdata(range(len(rewards)))
+        plt.pause(0.1)
+
+#plt.ioff()

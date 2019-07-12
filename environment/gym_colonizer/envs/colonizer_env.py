@@ -11,6 +11,9 @@ from gym_colonizer.envs.colors import *
 from gym_colonizer.envs.field_types import WOOD, CLAY, CORN, DESERT, IRON, SHEEP
 
 
+VILLAGE = 'Village'
+TOWN = 'Town'
+
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
@@ -50,7 +53,7 @@ class Spot():
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 5
         self.color = LIGHT_GRAY
-        self.id = uuid.uuid1()
+        self.id = uuid.uuid4()
         self.close_resource = []
         self.close_road = []
         self.owner = 0
@@ -67,13 +70,21 @@ class Spot():
     def draw(self, pygame, screen):
         pygame.gfxdraw.filled_circle(screen, round(
             self.pos.x), round(self.pos.y), self.radius, self.color)
+        font = pygame.font.SysFont("arial", 15)
+        text = font.render(str(self.rating), 3, (0, 0, 255))
+        screen.blit(text, (self.pos.x-10, self.pos.y-10))
+
+    def reset(self):
+        self.owner = 0
+
+        self.color = LIGHT_GRAY
 
 
 class Resource():
     def __init__(self, x, y, rating, resource):
         self.pos = dotdict({'x': x, 'y': y})
         self.radius = 25
-        self.id = uuid.uuid1()
+        self.id = uuid.uuid4()
         self.close_spot = []
         self.rating = rating
         self.resource = resource
@@ -94,7 +105,7 @@ class Road():
                             'x2': int(x2), 'y2': int(y2)})
         self.radius = 3
         self.color = (100, 200, 100)
-        self.id = uuid.uuid1()
+        self.id = uuid.uuid4()
         self.close_spot = [s1_id, s2_id]
 
     def draw(self, pygame, screen):
@@ -114,6 +125,15 @@ class ColonizerEnv(gym.Env):
         self.resources = {}
         self.lines = []
         self.initMap()
+        self.round = 1
+        self.sheep = 0
+        self.clay = 0
+        self.wood = 0
+        self.iron = 0
+        self.corn = 0
+        self.used_spots = []
+        self.episode = 0
+
 
     def get_state(self):
         state = []
@@ -122,13 +142,13 @@ class ColonizerEnv(gym.Env):
 
         for s in self.spots:
             state.append(self.spots[s].owner)
-
         return state
 
     def initMap(self):
         self.add_spots()
         self.add_roads_and_resources()
         self.add_relations()
+        self.add_spot_rating()
 
     def add_spots(self):
         mid_y = self.window_height/1.1
@@ -200,17 +220,30 @@ class ColonizerEnv(gym.Env):
                 dist = round(sqrt((spot.pos.x - res.pos.x) **
                                   2 + (spot.pos.y - res.pos.y)**2))
                 if dist == 52 or dist == 44:
-                    self.spots[s].close_resource.append(res.id)
+                    self.spots[s].close_resource.append(res)
                     self.resources[r].close_spot.append(spot.id)
                     self.lines.append([int(spot.pos.x), int(
                         spot.pos.y), int(res.pos.x), int(res.pos.y)])
 
+    def add_spot_rating(self):
+        for s in self.spots:
+            comul_rating = 0
+            for r in self.spots[s].close_resource:
+                comul_rating += get_rating(r.rating)
+            self.spots[s].rating = comul_rating
+                
+
     def reset(self):
         self.screen = None
-        self.spots = {}
-        self.roads = {}
-        self.resources = {}
-        self.initMap()
+        #self.spots = {}
+        #self.roads = {}
+        #self.resources = {}
+        for x in self.spots:
+            self.spots[x].reset()
+        self.used_spots = [] 
+        self.round = 1
+        self.episode += 1
+        #self.initMap()
 
     def render(self, mode='human', close=False):
         """
@@ -247,6 +280,11 @@ class ColonizerEnv(gym.Env):
                 for key in self.roads:
                     self.roads[key].draw(pygame, self.screen)
 
+                
+                font = pygame.font.SysFont("arial", 25)
+                text = font.render(str(self.episode), 3, (0, 0, 255))
+                self.screen.blit(text, (10, 10))
+
                 pygame.display.update()
 
         else:
@@ -262,12 +300,46 @@ class ColonizerEnv(gym.Env):
 
 
     def step(self, action):
+
+        # first two steps, build village and connected street
+
+        if self.round == 1 or self.round==3:
+            self.build_resource(action,VILLAGE)
+        
+        roll = self.roll_dice()
+        return self.reward_for_role(roll)
+
+        self.round+=1
+
+
+    def build_resource(self,action,type):
         cnt = 0
-        for key in self.spots.keys():
+        for spot_id in self.spots.keys():
             if cnt == action:
-                if self.spots[key].set_owner(1):
-                    self.get_rating(key)
-                    return 10  # return reward based on surrounding resources rating
-                else:
-                    return -1
+                valid = self.spots[spot_id].set_owner(1)
+                self.used_spots.append(self.spots[spot_id])
             cnt += 1
+#                if valid:
+#                    return self.get_rating(spot_id)
+#                    #return 10  # return reward based on surrounding resources rating
+#                else:
+#                    return -1
+
+
+    def roll_dice(self):
+        return random.randint(1,6)+random.randint(1,6)
+
+    def reward_for_role(self, roll):
+        reward = 0
+        for spot in self.used_spots:
+                for res in spot.close_resource:
+                    if res.rating == roll:
+                        reward += 1
+        return reward
+
+def get_rating(n):
+    n = n-7
+    n = n*-1 if n < 0 else n
+    n -=5 
+    n *= -1
+    return n
