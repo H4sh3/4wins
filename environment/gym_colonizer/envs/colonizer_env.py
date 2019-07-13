@@ -144,6 +144,11 @@ class ColonizerEnv(gym.Env):
             state.append(self.spots[s].owner)
         return state
 
+    def get_spot_rating_state(self):
+        state = []
+        for s in self.spots:
+            state.append(self.spots[s].rating)
+        return state
     def initMap(self):
         self.add_spots()
         self.add_roads_and_resources()
