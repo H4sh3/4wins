@@ -25,7 +25,7 @@ def get_color(res):
     res_color_dict = {
         CORN: YELLOW,
         WOOD: GREEN,
-        SHEEP: WHITE,
+        SHEEP: SHEEP_GREY,
         CLAY: ORANGE,
         IRON: GRAY,
         DESERT: BLACK
@@ -240,15 +240,11 @@ class ColonizerEnv(gym.Env):
 
     def reset(self):
         self.screen = None
-        #self.spots = {}
-        #self.roads = {}
-        #self.resources = {}
         for x in self.spots:
             self.spots[x].reset()
         self.used_spots = [] 
         self.round = 1
         self.episode += 1
-        #self.initMap()
 
     def render(self, mode='human', close=False):
         """
@@ -295,15 +291,6 @@ class ColonizerEnv(gym.Env):
         else:
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
-    def get_rating(self,spot):
-        rating = 0
-        print(spot)
-        for x in spot.close_resource:
-            rating += x.rating
-        return rating # add this to all spots
-
-
-
     def step(self, action):
         if self.round == 1 or self.round==3:
             return self.build_resource(action,VILLAGE)
@@ -315,19 +302,13 @@ class ColonizerEnv(gym.Env):
         for spot_id in self.spots.keys():
             if cnt == action:
                 spot = self.spots[spot_id]
-                print(spot)
                 valid = self.spots[spot_id].set_owner(1)
                 self.used_spots.append(self.spots[spot_id])
                 if valid:
-                    return self.get_rating(self.spots[spot_id])
-                    #return 10  # return reward based on surrounding resources rating
+                    return self.spots[spot_id].rating
                 else:
                     return -1
             cnt += 1
-
-
-    def roll_dice(self):
-        return random.randint(1,6)+random.randint(1,6)
 
     def reward_for_role(self, roll):
         reward = 0

@@ -10,7 +10,6 @@ from collections import namedtuple
 from itertools import count
 import random
 import sys
-from utils.utilities import get_game_screen
 import time
 import matplotlib
 import matplotlib.pyplot as plt
@@ -65,10 +64,7 @@ def select_action(state, eps=0.10):
             return policy_net(state).type(torch.FloatTensor)
             
     else:
-        ##print('random action')
-        #x = torch.tensor([random.randrange(n_actions)], device=device, dtype=torch.float)
         return torch.rand([n_actions])
-        #return torch.FloatTensor([random.randrange(n_actions)])
 
 
 
@@ -110,7 +106,7 @@ if __name__ == "__main__":
     env.render()
     buffer = ReplayMemory(10000)
     num_episodes = 1000
-    num_steps = 7
+    num_steps = 4
     rewards = []
 
     fig = plt.figure()
@@ -147,6 +143,4 @@ if __name__ == "__main__":
         ax.set_xlim([0,len(rewards)])
         Ln.set_ydata(rewards)
         Ln.set_xdata(range(len(rewards)))
-        plt.pause(0.1)
-
-#plt.ioff()
+        plt.pause(0.0001)
