@@ -295,40 +295,35 @@ class ColonizerEnv(gym.Env):
         else:
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
-    def get_rating(self,key):
-        spot = self.spots.get(key)
+    def get_rating(self,spot):
         rating = 0
+        print(spot)
         for x in spot.close_resource:
-            rating += self.resources[x].rating
+            rating += x.rating
         return rating # add this to all spots
 
 
 
     def step(self, action):
-
-        # first two steps, build village and connected street
-
         if self.round == 1 or self.round==3:
-            self.build_resource(action,VILLAGE)
-        
-        roll = self.roll_dice()
-        return self.reward_for_role(roll)
-
-        self.round+=1
-
+            return self.build_resource(action,VILLAGE)
+        else:
+            return 0
 
     def build_resource(self,action,type):
         cnt = 0
         for spot_id in self.spots.keys():
             if cnt == action:
+                spot = self.spots[spot_id]
+                print(spot)
                 valid = self.spots[spot_id].set_owner(1)
                 self.used_spots.append(self.spots[spot_id])
+                if valid:
+                    return self.get_rating(self.spots[spot_id])
+                    #return 10  # return reward based on surrounding resources rating
+                else:
+                    return -1
             cnt += 1
-#                if valid:
-#                    return self.get_rating(spot_id)
-#                    #return 10  # return reward based on surrounding resources rating
-#                else:
-#                    return -1
 
 
     def roll_dice(self):

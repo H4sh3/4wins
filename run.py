@@ -116,7 +116,7 @@ if __name__ == "__main__":
     fig = plt.figure()
     ax = fig.add_subplot(111)
     Ln, = ax.plot(rewards)
-    ax.set_ylim([0,50])
+    ax.set_ylim([0,250])
     plt.ion()
     plt.show()    
 
