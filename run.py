@@ -34,6 +34,7 @@ plt.ion()
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
+
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -41,12 +42,6 @@ class ReplayMemory:
         self.position = 0
 
     def push(self, transition):
-        #"""Saves a transition."""
-        #if len(self.memory) < self.capacity:
-        #    self.memory.append(None)
-        #self.memory[self.position] = Transition(*args)
-        #self.position = (self.position + 1) % self.capacity
-
         self.memory.append(transition)
         if len(self.memory) > self.capacity:
             del self.memory[0]
@@ -57,6 +52,7 @@ class ReplayMemory:
     def __len__(self):
         return len(self.memory)
 
+
 def select_action(state, eps=0.10):
     rand = random.uniform(0, 1)
     if rand > eps:
@@ -65,8 +61,6 @@ def select_action(state, eps=0.10):
             
     else:
         return torch.rand([n_actions])
-
-
 
 
 def optimize_model(buffer, batch_size, gamma=0.999):
@@ -99,35 +93,34 @@ def optimize_model(buffer, batch_size, gamma=0.999):
     optimizer.step()
 
 
-#def random_agent(episodes=10000):
 if __name__ == "__main__":
     env = gym.make("Colonizer-v0")
     env.reset()
     env.render()
     buffer = ReplayMemory(10000)
-    num_episodes = 1000
-    num_steps = 4
+    iteration = 400
+    num_steps = 8
     rewards = []
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
     Ln, = ax.plot(rewards)
-    ax.set_ylim([0,250])
+    ax.set_ylim([0,100])
+    plt.ylabel('Reward')
+    plt.xlabel('Iteration')
     plt.ion()
     plt.show()    
 
-    for i in range(num_episodes):
+    for i in range(iteration):
         env.reset()
         rewards.append(0)
         reward = 0
         for t in range(num_steps):
             env.render()
             state = env.get_state()
-
             state = torch.FloatTensor([state])
 
             last_state = state
-            #action = torch.max(output,0,keepdim=True).indices[0].item()
             action = select_action(state[0])
             action = action.max(0).indices
             
@@ -144,3 +137,4 @@ if __name__ == "__main__":
         Ln.set_ydata(rewards)
         Ln.set_xdata(range(len(rewards)))
         plt.pause(0.0001)
+    plt.savefig('plot.png')

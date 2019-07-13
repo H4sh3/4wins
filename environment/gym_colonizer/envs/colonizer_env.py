@@ -292,10 +292,7 @@ class ColonizerEnv(gym.Env):
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
     def step(self, action):
-        if self.round == 1 or self.round==3:
-            return self.build_resource(action,VILLAGE)
-        else:
-            return 0
+        return self.build_resource(action,VILLAGE)
 
     def build_resource(self,action,type):
         cnt = 0
