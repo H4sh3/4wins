@@ -48,38 +48,6 @@ def get_resources(shuffle=True):
     return resources
 
 
-class Spot():
-    def __init__(self, x, y):
-        self.pos = dotdict({'x': x, 'y': y})
-        self.radius = 5
-        self.color = LIGHT_GRAY
-        self.id = uuid.uuid4()
-        self.close_resource = []
-        self.close_road = []
-        self.owner = 0
-
-    def set_owner(self, owner):
-        if self.owner is 0:
-            self.owner = owner
-            if owner == 1:
-                self.color = RED
-            return True
-        else:
-            return False
-
-    def draw(self, pygame, screen):
-        pygame.gfxdraw.filled_circle(screen, round(
-            self.pos.x), round(self.pos.y), self.radius, self.color)
-        font = pygame.font.SysFont("arial", 15)
-        text = font.render(str(self.rating), 3, (0, 0, 255))
-        screen.blit(text, (self.pos.x-10, self.pos.y-10))
-
-    def reset(self):
-        self.owner = 0
-
-        self.color = LIGHT_GRAY
-
-
 class Resource():
     def __init__(self, x, y, rating, resource):
         self.pos = dotdict({'x': x, 'y': y})
@@ -99,17 +67,64 @@ class Resource():
         screen.blit(text, (self.pos.x-10, self.pos.y-10))
 
 
+class Spot():
+    def __init__(self, x, y):
+        self.pos = dotdict({'x': x, 'y': y})
+        self.radius = 5
+        self.color = LIGHT_GRAY
+        self.id = uuid.uuid4()
+        self.close_resource = []
+        self.close_road = []
+        self.owner = 0
+
+    def set_owner(self, owner):
+        if self.owner is 0:
+            self.owner = owner
+            if owner == 1:
+                self.color = GREEN
+            return True
+        else:
+            return False
+
+    def draw(self, pygame, screen):
+        pygame.gfxdraw.filled_circle(screen, round(
+            self.pos.x), round(self.pos.y), self.radius, self.color)
+        font = pygame.font.SysFont("arial", 15)
+        text = font.render(str(self.rating), 3, (0, 0, 255))
+        screen.blit(text, (self.pos.x-10, self.pos.y-10))
+
+    def reset(self):
+        self.owner = 0
+        self.color = LIGHT_GRAY
+
+
 class Road():
-    def __init__(self, x1, y1, x2, y2, s1_id, s2_id):
+    def __init__(self, x1, y1, x2, y2, s1, s2):
         self.pos = dotdict({'x1': int(x1), 'y1': int(y1),
                             'x2': int(x2), 'y2': int(y2)})
         self.radius = 3
-        self.color = (100, 200, 100)
+        self.color = WHITE
         self.id = uuid.uuid4()
-        self.close_spot = [s1_id, s2_id]
+        self.close_spot = [s1,s2]
+        self.owner = 0
+        self.rating = 1
 
     def draw(self, pygame, screen):
         pygame.gfxdraw.line(screen, *self.pos.values(), self.color)
+
+    def set_owner(self, owner):
+        if self.owner is 0:
+            self.owner = owner
+            if owner == 1:
+                self.color = BLACK
+            return True
+        else:
+            return False
+
+    def reset(self):
+        self.owner = 0
+        self.color = WHITE
+
 
 
 class ColonizerEnv(gym.Env):
@@ -144,16 +159,20 @@ class ColonizerEnv(gym.Env):
             state.append(self.spots[s].owner)
         return state
 
+
     def get_spot_rating_state(self):
         state = []
         for s in self.spots:
             state.append(self.spots[s].rating)
         return state
+
+
     def initMap(self):
         self.add_spots()
         self.add_roads_and_resources()
         self.add_relations()
         self.add_spot_rating()
+
 
     def add_spots(self):
         mid_y = self.window_height/1.1
@@ -202,7 +221,7 @@ class ColonizerEnv(gym.Env):
                     # Roads
                     if dist == 53 or dist == 35:
                         road = Road(s1.pos.x, s1.pos.y, s2.pos.x,
-                                    s2.pos.y, s1.id, s2.id)
+                                    s2.pos.y, s1, s2)
                         self.roads[road.id] = road
                         used_positions.append([x, y])
                         self.spots[key_s1].close_road.append(road) 
@@ -217,6 +236,7 @@ class ColonizerEnv(gym.Env):
                             resource = Resource(x, y, r, resources.pop())
                         self.resources[resource.id] = resource
                         used_positions.append([x, y])
+
 
     def add_relations(self):
         # relation between spots and resources
@@ -245,6 +265,8 @@ class ColonizerEnv(gym.Env):
         self.screen = None
         for x in self.spots:
             self.spots[x].reset()
+        for x in self.roads:
+            self.roads[x].reset()
         self.used_spots = [] 
         self.round = 1
         self.episode += 1
@@ -295,20 +317,23 @@ class ColonizerEnv(gym.Env):
             raise error.UnsupportedMode("Unsupported render mode: " + mode)
 
     def step(self, action):
-        return self.build_resource(action,VILLAGE)
+        return self.build_resource(action)
 
-    def build_resource(self,action,type):
-        cnt = 0
-        for spot_id in self.spots.keys():
-            if cnt == action:
-                spot = self.spots[spot_id]
-                valid = self.spots[spot_id].set_owner(1)
-                self.used_spots.append(self.spots[spot_id])
-                if valid:
-                    return self.spots[spot_id].rating
-                else:
-                    return -1
-            cnt += 1
+    def build_resource(self,action):
+        build = self.get_build_from_action(action)
+        valid = build.set_owner(1)
+        self.used_spots.append(build)
+        if valid:
+            return build.rating
+        else:
+            print('invalid')
+            return -1
+    
+    def get_build_from_action(self,action):
+        if(action <= len(self.spots)): # first 54 actions are building villages on spots
+            return self.get_spot_by_index(action)
+        else: # build roads
+            return self.get_road_by_index(action-len(self.spots))
 
     def reward_for_role(self, roll):
         reward = 0
@@ -317,6 +342,53 @@ class ColonizerEnv(gym.Env):
                     if res.rating == roll:
                         reward += 1
         return reward
+
+    def get_spot_by_index(self,i):
+        if i < len(self.spots):
+            cnt = 0
+            for spot_id in self.spots.keys():
+                if cnt == i:
+                    return self.spots[spot_id]
+                cnt += 1
+        else:
+            i -= len(self.spots)
+            cnt = 0
+            for road_id in self.roads.keys():
+                if cnt == i:
+                    return self.roads[road_id]
+                cnt += 1
+
+    def get_road_by_index(self,i):
+        cnt = 0
+        for road_id in self.roads.keys():
+            if cnt == i:
+                return self.roads[road_id]
+            cnt += 1
+
+    def filter_legal_actions(self,actions,step):
+        for i, val in enumerate(actions):
+            s = self.get_spot_by_index(i)
+
+            if s.owner == 1: # build already
+                actions[i] = 0
+            else:
+                if i < len(self.spots): # only spots
+                    if step > 2: # first two steps can build everywhere
+                        connected_to_road = False
+                        for r in s.close_road:
+                            if r.owner == 1:
+                                connected_to_road = True
+                        if not connected_to_road:
+                            actions[i] = 0
+
+                else:
+                    has_close_spot = False
+                    for spot in s.close_spot:
+                        if spot.owner == 1:
+                            has_close_spot = True
+                    if not has_close_spot:
+                        actions[i] = 0
+        return actions
 
 def get_rating(n):
     n = n-7

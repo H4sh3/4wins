@@ -20,7 +20,7 @@ from agent.agent import DQN
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
-n_actions = 54
+n_actions = 54+72 # build spots+roads
 GAMMA = 0.8
 
 policy_net = DQN(73, n_actions).to(device)
@@ -122,6 +122,7 @@ if __name__ == "__main__":
 
             last_state = state
             action = select_action(state[0])
+            action = env.filter_legal_actions(action,t)
             action = action.max(0).indices
             
             reward = env.step(action.item())
