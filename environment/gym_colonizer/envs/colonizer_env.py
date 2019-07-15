@@ -326,7 +326,7 @@ class ColonizerEnv(gym.Env):
         if valid:
             return build.rating
         else:
-            print('invalid')
+            print('invalid',action,build)
             return -1
     
     def get_build_from_action(self,action):
@@ -368,11 +368,10 @@ class ColonizerEnv(gym.Env):
     def filter_legal_actions(self,actions,step):
         for i, val in enumerate(actions):
             s = self.get_spot_by_index(i)
-
             if s.owner == 1: # build already
-                actions[i] = 0
+                actions[i] = -100
             else:
-                if i < len(self.spots): # only spots
+                if i < len(self.spots): # Spots
                     if step > 2: # first two steps can build everywhere
                         connected_to_road = False
                         for r in s.close_road:
@@ -381,13 +380,13 @@ class ColonizerEnv(gym.Env):
                         if not connected_to_road:
                             actions[i] = 0
 
-                else:
+                else: # Road
                     has_close_spot = False
                     for spot in s.close_spot:
                         if spot.owner == 1:
                             has_close_spot = True
                     if not has_close_spot:
-                        actions[i] = 0
+                        actions[i] = -100
         return actions
 
 def get_rating(n):

@@ -37,8 +37,9 @@ class ReplayMemory(object):
 class DQN(nn.Module):
     def __init__(self, input_layer, outputs):
         super(DQN, self).__init__()
-        hidden_layer = 256
-        self.model = nn.Sequential(nn.Linear(input_layer, hidden_layer),
+        hidden_layer = 128
+        self.model = nn.Sequential(
+                     nn.Linear(input_layer, hidden_layer),
                      nn.ReLU(),
                      nn.Linear(hidden_layer, outputs))
 

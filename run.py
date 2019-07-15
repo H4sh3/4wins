@@ -74,7 +74,7 @@ def optimize_model(buffer, batch_size, gamma=0.999):
     batch_state = Variable(torch.cat(batch_state))
     batch_action = Variable(torch.cat(batch_action))
 
-    batch_reward = Variable(torch.cat(batch_reward))
+    batch_reward = Variable(torch.cat(batch_reward).view(128))
     batch_next_state = Variable(torch.cat(batch_next_state))
 
     # current Q values are estimated by NN for all actions
@@ -82,9 +82,9 @@ def optimize_model(buffer, batch_size, gamma=0.999):
     # expected Q values are estimated from actions which gives maximum Q value
     max_next_q_values = policy_net(batch_next_state).detach().max(1)[0]
     expected_q_values = batch_reward + (GAMMA * max_next_q_values)
-    # loss is measured from error between current and newly expected Q values
 
-    #loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze_(1))
+    
+    loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze_(1))
     loss = F.smooth_l1_loss(current_q_values, expected_q_values)
 
     # backpropagation of loss to NN
@@ -98,9 +98,10 @@ if __name__ == "__main__":
     env.reset()
     env.render()
     buffer = ReplayMemory(10000)
-    iteration = 400
-    num_steps = 8
+    iteration = 100
+    num_steps = 10
     rewards = []
+    max_reward = 0
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -124,7 +125,6 @@ if __name__ == "__main__":
             action = select_action(state[0])
             action = env.filter_legal_actions(action,t)
             action = action.max(0).indices
-            
             reward = env.step(action.item())
             rewards[i] += reward
 
@@ -134,8 +134,17 @@ if __name__ == "__main__":
             buffer.push((state, torch.LongTensor([[action]]), next_state, reward_t))
             # Replay memory
             optimize_model(buffer, 128)
+
+        if rewards[i] > max_reward:
+            max_reward = rewards[i]
+            ax.set_ylim([0,max_reward+20])    
+
         ax.set_xlim([0,len(rewards)])
         Ln.set_ydata(rewards)
         Ln.set_xdata(range(len(rewards)))
+
+
+
+
         plt.pause(0.0001)
     plt.savefig('plot.png')
