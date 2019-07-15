@@ -205,6 +205,8 @@ class ColonizerEnv(gym.Env):
                                     s2.pos.y, s1.id, s2.id)
                         self.roads[road.id] = road
                         used_positions.append([x, y])
+                        self.spots[key_s1].close_road.append(road) 
+                        self.spots[key_s2].close_road.append(road)
 
                     # Resources
                     if dist == 105:
@@ -227,14 +229,15 @@ class ColonizerEnv(gym.Env):
                 if dist == 52 or dist == 44:
                     self.spots[s].close_resource.append(res)
                     self.resources[r].close_spot.append(spot.id)
-                    self.lines.append([int(spot.pos.x), int(
-                        spot.pos.y), int(res.pos.x), int(res.pos.y)])
 
     def add_spot_rating(self):
         for s in self.spots:
             comul_rating = 0
             for r in self.spots[s].close_resource:
-                comul_rating += get_rating(r.rating)
+                if r.rating == 7:
+                    comul_rating += 0
+                else:
+                    comul_rating += get_rating(r.rating)
             self.spots[s].rating = comul_rating
                 
 
@@ -270,8 +273,8 @@ class ColonizerEnv(gym.Env):
                 clock = pygame.time.Clock()
 
                 self.screen.fill((255, 255, 255))
-                for line in self.lines:
-                    pygame.gfxdraw.line(self.screen, *line, BLACK)
+                #for line in self.lines:
+                #    pygame.gfxdraw.line(self.screen, *line, BLACK)
                 for key in self.resources:
                     self.resources[key].draw(pygame, self.screen)
 
