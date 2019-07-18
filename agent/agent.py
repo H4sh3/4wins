@@ -37,13 +37,18 @@ class ReplayMemory(object):
 class DQN(nn.Module):
     def __init__(self, input_layer, outputs):
         super(DQN, self).__init__()
-        hidden_layer = 128
+        #hidden_layer = 205
+        hidden_layer = 300
+        # self.model = nn.Sequential(nn.RNN(input_layer,5,hidden_layer),nn.Linear(hidden_layer, outputs))
+        # self.model = nn.RNN(input_layer,outputs,5)
         self.model = nn.Sequential(
                      nn.Linear(input_layer, hidden_layer),
                      nn.ReLU(),
-                     nn.Linear(hidden_layer, outputs))
+                     nn.Linear(hidden_layer, outputs),
+                     nn.ReLU())
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
+        out = self.model(x)
         return self.model(x)

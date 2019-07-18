@@ -20,14 +20,15 @@ from agent.agent import DQN
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
-n_actions = 54+72 # build spots+roads
+inputs = 150
+n_actions = 54+72+1 # build spots+roads+ratings+doNothing
 GAMMA = 0.8
 
-policy_net = DQN(73, n_actions).to(device)
-target_net = DQN(73, n_actions).to(device)
+policy_net = DQN(inputs, n_actions).to(device)
+target_net = DQN(inputs, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
-optimizer = optim.RMSprop(policy_net.parameters())
+optimizer = optim.RMSprop(policy_net.parameters(),lr=0.001, momentum=0.9)
 
 plt.ion()
 
@@ -85,7 +86,7 @@ def optimize_model(buffer, batch_size, gamma=0.999):
 
     
     loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze_(1))
-    loss = F.smooth_l1_loss(current_q_values, expected_q_values)
+    #loss = F.smooth_l1_loss(current_q_values, expected_q_values)
 
     # backpropagation of loss to NN
     optimizer.zero_grad()
@@ -98,14 +99,17 @@ if __name__ == "__main__":
     env.reset()
     env.render()
     buffer = ReplayMemory(10000)
-    iteration = 100
+    iteration = 5000
     num_steps = 10
     rewards = []
     max_reward = 0
-
+    median = []
     fig = plt.figure()
     ax = fig.add_subplot(111)
+    
     Ln, = ax.plot(rewards)
+    Ln2, = ax.plot(median)
+
     ax.set_ylim([0,100])
     plt.ylabel('Reward')
     plt.xlabel('Iteration')
@@ -124,27 +128,37 @@ if __name__ == "__main__":
             last_state = state
             action = select_action(state[0])
             action = env.filter_legal_actions(action,t)
+
             action = action.max(0).indices
-            reward = env.step(action.item())
+            
+            reward = env.step(action.item(),t)
+
+            
+            #if t > 2 and reward > 0:
+            #    env.remove_resources_for(action.item())
             rewards[i] += reward
 
             reward_t = torch.FloatTensor([reward]).view(1, 1)
             
-            next_state = torch.FloatTensor([env.get_state()]) - last_state
+            next_state = torch.FloatTensor([env.get_state()])# - last_state
             buffer.push((state, torch.LongTensor([[action]]), next_state, reward_t))
             # Replay memory
             optimize_model(buffer, 128)
+            median.append(np.mean(rewards))
 
         if rewards[i] > max_reward:
             max_reward = rewards[i]
             ax.set_ylim([0,max_reward+20])    
 
-        ax.set_xlim([0,len(rewards)])
-        Ln.set_ydata(rewards)
-        Ln.set_xdata(range(len(rewards)))
+        if i % 20 == 0:
+            ax.set_xlim([0,len(rewards)])
 
+            Ln.set_ydata(rewards)
+            Ln.set_xdata(range(len(rewards)))
 
+            Ln2.set_ydata(median)
+            Ln2.set_xdata(range(len(median)))
 
+            plt.pause(0.00001)
 
-        plt.pause(0.0001)
     plt.savefig('plot.png')
