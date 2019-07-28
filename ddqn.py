@@ -108,12 +108,11 @@ n_actions = 54+72+1 # build spots+roads+ratings+doNothing
 
 if __name__ == "__main__":
     s = tf.compat.v1.Session()
-    print(s.list_devices())
     env = gym.make('Colonizer-v0')
     state_size = inputs
     action_size = n_actions
     agent = DQNAgent(state_size, action_size)
-    #agent.load("./save/agent-ddqn.h5")
+    agent.load("./save/agent-ddqn.h5")
     done = False
     batch_size = 32
     EPISODES = 5000
