@@ -10,6 +10,7 @@ from gym_colonizer.envs.colors import *
 from gym_colonizer.envs.field_types import WOOD, CLAY, CORN, DESERT, IRON, SHEEP
 import sys
 import numpy as np
+import json
 
 
 VILLAGE = 'Village'
@@ -66,6 +67,7 @@ class Resource():
         self.close_spot = []
         self.rating = rating
         self.resource = resource
+        print('self.resource',self.resource)
         self.color = get_color(self.resource)
 
     def draw(self, pygame, screen):
@@ -75,6 +77,13 @@ class Resource():
         font = pygame.font.SysFont("arial", 25)
         text = font.render(str(self.rating), 3, (0, 0, 255))
         screen.blit(text, (self.pos.x-10, self.pos.y-10))
+
+    def toJson(self):
+        return {'x': self.pos.x,
+                'y': self.pos.y,
+                'rating': self.rating,
+                'resource': self.resource
+                }
 
 
 class Spot():
@@ -86,7 +95,7 @@ class Spot():
         self.close_resource = []
         self.close_road = []
         self.owner = 0
-
+  
     def set_owner(self, owner):
         if self.owner is 0:
             self.owner = owner
@@ -144,9 +153,11 @@ class ColonizerEnv(gym.Env):
     def __init__(self):
         self.window_height = 500
         self.window_width = 500
+
         self.spots = {}
         self.roads = {}
         self.resources = {}
+
         self.lines = []
         self.initMap()
         self.round = 1
@@ -194,9 +205,30 @@ class ColonizerEnv(gym.Env):
 
     def initMap(self):
         self.add_spots()
-        self.add_roads_and_resources()
+        self.add_roads()
+
+        resources = []
+        rating = []
+        with open('map.json') as json_file:
+            data = json.load(json_file)
+            for p in data:
+                rating.append(p['rating'])
+                if p['resource'] != DESERT:
+                    resources.append(p['resource'])
+    
+        self.add_resources(resources,rating)
         self.add_relations()
         self.add_spot_rating()
+
+### Save map to file
+#        r = []
+#        for key in self.resources:
+#            r.append(self.resources[key].toJson())
+#        dto = {
+#            'resources': r
+#        }
+#        with open('map.json', 'w') as outfile:
+#            json.dump(r, outfile)
 
     def add_spots(self):
         mid_y = self.window_height/1.1
@@ -221,13 +253,48 @@ class ColonizerEnv(gym.Env):
                 s = Spot(mid_x+x*size, mid_y-y*(size-10)/2)
                 self.spots[s.id] = s
 
-    def add_roads_and_resources(self):
+    def add_resources(self,resources=False,rating=False):
+        used_positions = []
+        print('resources',resources)
+        if resources:
+            resources = resources
+        else:
+            resources = get_resources()
+
+        if rating:
+            rating = rating
+        else:
+            rating = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12]
+            random.shuffle(rating)
+
+
+        for key_s1 in self.spots:
+            s1 = self.spots[key_s1]
+            for key_s2 in self.spots:
+                s2 = self.spots[key_s2]
+                if s1 == s2:
+                    continue
+                else:
+                    dist = round(sqrt((s2.pos.x - s1.pos.x) **
+                                      2 + (s2.pos.y - s1.pos.y)**2))
+                    x = (s1.pos.x+s2.pos.x)/2
+                    y = (s1.pos.y+s2.pos.y)/2
+                    if [x, y] in used_positions:
+                        continue
+
+                    # Resources
+                    if dist == 105:
+                        r = rating.pop()
+                        if r == 7:
+                            resource = Resource(x, y, r, DESERT)
+                        else:
+                            resource = Resource(x, y, r, resources.pop())
+                        self.resources[resource.id] = resource
+                        used_positions.append([x, y])
+
+    def add_roads(self):
         used_positions = []
 
-        rating = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12]
-        resources = get_resources()
-
-        random.shuffle(rating)
         for key_s1 in self.spots:
             s1 = self.spots[key_s1]
             for key_s2 in self.spots:
@@ -250,16 +317,6 @@ class ColonizerEnv(gym.Env):
                         used_positions.append([x, y])
                         self.spots[key_s1].close_road.append(road)
                         self.spots[key_s2].close_road.append(road)
-
-                    # Resources
-                    if dist == 105:
-                        r = rating.pop()
-                        if r == 7:
-                            resource = Resource(x, y, r, DESERT)
-                        else:
-                            resource = Resource(x, y, r, resources.pop())
-                        self.resources[resource.id] = resource
-                        used_positions.append([x, y])
 
     def add_relations(self):
         # relation between spots and resources
@@ -402,9 +459,9 @@ class ColonizerEnv(gym.Env):
                 return -1
 
     def get_build_from_action(self, action):
-        if action <= len(self.spots): # villages
+        if action <= len(self.spots):  # villages
             return self.get_spot_by_index(action)
-        else:  #roads
+        else:  # roads
             return self.get_road_by_index(action-len(self.spots))
 
     def get_spot_by_index(self, i):
@@ -499,7 +556,7 @@ class ColonizerEnv(gym.Env):
         self.collected_resources[CORN] -= cost
 
     def remove_resources_for_road(self):
-        cost = 10
+        cost = 1
         self.collected_resources[WOOD] -= cost
         self.collected_resources[CLAY] -= cost
 
