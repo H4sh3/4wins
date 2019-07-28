@@ -11,9 +11,7 @@ from keras import backend as K
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 from keras.utils import plot_model
-
-EPISODES = 
-
+import time
 
 class DQNAgent:
     def __init__(self, state_size, action_size):
@@ -118,22 +116,23 @@ if __name__ == "__main__":
     #agent.load("./save/agent-ddqn.h5")
     done = False
     batch_size = 32
-
+    EPISODES = 5000
     rewards = {}
     for e in range(EPISODES):
+        start = time.time()
         state = env.reset()
         state = np.reshape(state, [1, state_size])
         rewards[e] = 0
-        for time in range(40):
+        for t in range(40):
             env.render()
             action = agent.act(state)
-            next_state, reward, done, _ = env.step(action,time)
+            next_state, reward, done, _ = env.step(action,t)
             reward = reward if not done else -10
             rewards[e] += reward
             next_state = np.reshape(next_state, [1, state_size])
             agent.remember(state, action, reward, next_state, done)
             state = next_state
-            if done or time == 19:
+            if done or t == 19:
                 agent.update_target_model()
                 print("episode: {}/{}, score: {}, e: {:.2}"
                       .format(e, EPISODES, rewards[e], agent.epsilon))
@@ -142,3 +141,5 @@ if __name__ == "__main__":
                 agent.replay(batch_size)
         if e % 1000 == 0:
             agent.save("./save/agent-ddqn.h5")
+        end = time.time()
+        print(end - start)

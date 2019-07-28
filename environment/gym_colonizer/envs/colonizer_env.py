@@ -2,7 +2,6 @@ import gym
 import random
 import torch
 
-
 from gym_colonizer.envs.field_types import CORN, WOOD, SHEEP, CLAY, IRON, DESERT
 from math import sqrt
 from gym import error
@@ -372,6 +371,12 @@ class ColonizerEnv(gym.Env):
             return 0
         build = self.get_build_from_action(action)
         if isinstance(build, Spot):
+            # need 2 roads between villages
+            for r in build.close_road:
+                for spot in r.close_spot:
+                    if spot.id is not build.id:
+                        if spot.owner == 1:
+                            return -1
             if not self.spot_connected(build.close_road) and t > 2:
                 return -1
             if not self.can_build_village() and t > 2:
@@ -472,7 +477,7 @@ class ColonizerEnv(gym.Env):
         return False
 
     def can_build_village(self):
-        cost = 10
+        cost = 1
         return self.collected_resources[WOOD] > cost and self.collected_resources[CLAY] > cost and self.collected_resources[SHEEP] > cost and self.collected_resources[CORN] > cost
 
     def can_build_road(self):
@@ -487,7 +492,7 @@ class ColonizerEnv(gym.Env):
                 self.remove_resources_for_road()
 
     def remove_resources_for_village(self):
-        cost = 10
+        cost = 1
         self.collected_resources[WOOD] -= cost
         self.collected_resources[CLAY] -= cost
         self.collected_resources[SHEEP] -= cost
