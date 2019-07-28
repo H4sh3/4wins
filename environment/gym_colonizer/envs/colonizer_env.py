@@ -10,6 +10,7 @@ import uuid
 from gym_colonizer.envs.colors import *
 from gym_colonizer.envs.field_types import WOOD, CLAY, CORN, DESERT, IRON, SHEEP
 import sys
+import numpy as np
 
 
 VILLAGE = 'Village'
@@ -161,6 +162,7 @@ class ColonizerEnv(gym.Env):
         self.used_spots = []
         self.used_roads = []
         self.episode = 0
+        self.iteration = 0
 
     def init_collected_resources(self):
         return {
@@ -173,19 +175,17 @@ class ColonizerEnv(gym.Env):
 
     def get_state(self):
         state = []
-        for r in self.resources:
-            state.append(self.resources[r].rating)
-
         for s in self.spots:
             state.append(self.spots[s].owner)
 
         for s in self.roads:
             state.append(self.roads[s].owner)
 
-        for s in itervalues(self.collected_resources):
-            state.append(s)
+        state.append(int(self.can_build_road()))
+        state.append(int(self.can_build_village()))
+        state.append(self.iteration)
 
-        return state
+        return np.array(state)
 
     def get_spot_rating_state(self):
         state = []
@@ -294,7 +294,9 @@ class ColonizerEnv(gym.Env):
         self.used_roads = []
         self.round = 1
         self.episode += 1
+        self.iteration = 0
         self.collected_resources = self.init_collected_resources()
+        return self.get_state()
 
     def render(self, mode='human', close=False):
         """
@@ -335,7 +337,7 @@ class ColonizerEnv(gym.Env):
                 for key in self.collected_resources:
                     font = pygame.font.SysFont("arial", 25)
                     text = font.render(
-                        str(self.collected_resources[key]), 3, (0, 0, 255))
+                        str(key[:2])+str(self.collected_resources[key]), 3, (0, 0, 255))
                     self.screen.blit(text, (400, 20*i))
                     i += 1
 
@@ -359,38 +361,35 @@ class ColonizerEnv(gym.Env):
 
     def step(self, action, t):
         self.distribute_resources()
-        reward = self.build_resource(action,t)
-        #if reward > 0 and t > 2:
-        #    self.remove_resources_for(action)
-        return reward
-        # return 5*len(self.used_spots)+len(self.used_roads)
-        # return sum(itervalues(self.collected_resources))
+        reward = self.build_resource(action, t)
+        if reward > 0 and t > 2:
+            self.remove_resources_for(action)
+        self.iteration += 1
+        return self.get_state(), reward, False, {}
 
-    def build_resource(self, action,t):
+    def build_resource(self, action, t):
         if action == 126:
             return 0
         build = self.get_build_from_action(action)
-
         if isinstance(build, Spot):
-            if not self.spot_connected(build.close_road) and t >2:
+            if not self.spot_connected(build.close_road) and t > 2:
                 return -1
-            #if not self.can_build_village() and t >2:
-            #    return 0
+            if not self.can_build_village() and t > 2:
+                return 0
             valid = build.set_owner(1)
-            
             if valid:
                 self.used_spots.append(build)
-                return 1
+                return 2
             else:
                 return -1
 
-        if isinstance(build, Road): 
+        if isinstance(build, Road):
             if not self.road_connected(build.close_spot):
                 return -1
-            #if not self.can_build_road():
-            #    return 0
+            if not self.can_build_road() or t == 2 or t == 4:
+                return 0
             valid = build.set_owner(1)
-            
+
             if valid:
                 self.used_roads.append(build)
                 return 1
@@ -398,9 +397,9 @@ class ColonizerEnv(gym.Env):
                 return -1
 
     def get_build_from_action(self, action):
-        if(action <= len(self.spots)):  # first 54 actions are building villages on spots
+        if action <= len(self.spots): # villages
             return self.get_spot_by_index(action)
-        else:  # build roads
+        else:  #roads
             return self.get_road_by_index(action-len(self.spots))
 
     def get_spot_by_index(self, i):
@@ -425,36 +424,37 @@ class ColonizerEnv(gym.Env):
                 return self.roads[road_id]
             cnt += 1
 
+    # not used atm
     def filter_legal_actions(self, actions, step):
         can_build_village = self.can_build_village()
         can_build_road = self.can_build_road()
-        
-        
+        actions = actions[0]
         for i, val in enumerate(actions):
             if i < 126:
                 s = self.get_build_from_action(i)
                 if s.owner == 1:  # build already
-                    actions[i] = -100
+                    actions[i] = 0
                 else:  # free spot or road
                     if i < len(self.spots):  # Spots
                         if step > 2:  # first two steps can build everywhere and are free
                             if not can_build_village:
-                                actions[i] = -100
+                                actions[i] = 0
                             else:
-                                connected_to_road = self.spot_connected(self.spots[s.id].close_road)
+                                connected_to_road = self.spot_connected(
+                                    self.spots[s.id].close_road)
                                 if not connected_to_road:
-                                    actions[i] = -100
-                                
+                                    actions[i] = 0
 
-                    if i > len(self.spots):  # Roads
+                    if i >= len(self.spots):  # Roads
                         # cant build roads in first two steps
-                        if not can_build_road:
-                            actions[i] = -100
+                        if not can_build_road or step < 2:
+                            actions[i] = 0
                         else:
-                            has_close_spot = self.road_connected(self.roads[s.id].close_spot)
-                            if not has_close_spot:
-                                actions[i] = -100
-        return actions
+                            connected = self.road_connected(
+                                self.roads[s.id].close_spot)
+                            if not connected:
+                                actions[i] = 0
+        return actions.unsqueeze(0)
 
     def spot_connected(self, close_road):
         for r in close_road:
@@ -466,16 +466,20 @@ class ColonizerEnv(gym.Env):
         for spot in close_spot:
             if spot.owner == 1:
                 return True
+            for r in spot.close_road:
+                if r.owner == 1:
+                    return True
         return False
 
     def can_build_village(self):
-        #return self.collected_resources[WOOD] > 10 and self.collected_resources[CLAY] > 10 and self.collected_resources[SHEEP] > 10 and self.collected_resources[CORN] > 10
-        return self.collected_resources[WOOD] > 10 and self.collected_resources[CLAY]
+        cost = 10
+        return self.collected_resources[WOOD] > cost and self.collected_resources[CLAY] > cost and self.collected_resources[SHEEP] > cost and self.collected_resources[CORN] > cost
 
     def can_build_road(self):
-        return self.collected_resources[WOOD] > 10 and self.collected_resources[CLAY] > 10
+        cost = 10
+        return self.collected_resources[WOOD] > cost and self.collected_resources[CLAY] > cost
 
-    def remove_resources_for(self,action):
+    def remove_resources_for(self, action):
         if action != 128:
             if(action > len(self.spots)):
                 self.remove_resources_for_village()
@@ -483,14 +487,16 @@ class ColonizerEnv(gym.Env):
                 self.remove_resources_for_road()
 
     def remove_resources_for_village(self):
-        self.collected_resources[WOOD] -= 10
-        self.collected_resources[CLAY] -= 10
-        #self.collected_resources[SHEEP] -= 10
-        #self.collected_resources[CORN] -= 10
+        cost = 10
+        self.collected_resources[WOOD] -= cost
+        self.collected_resources[CLAY] -= cost
+        self.collected_resources[SHEEP] -= cost
+        self.collected_resources[CORN] -= cost
 
     def remove_resources_for_road(self):
-        self.collected_resources[WOOD] -= 10
-        self.collected_resources[CLAY] -= 10
+        cost = 10
+        self.collected_resources[WOOD] -= cost
+        self.collected_resources[CLAY] -= cost
 
 
 def get_rating(n):

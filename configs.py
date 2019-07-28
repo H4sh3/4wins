@@ -5,7 +5,6 @@ W_WIDTH, W_HEIGHT = 640, 480
 KEY = {"UP": 1, "DOWN": 2, "LEFT": 3, "RIGHT": 4}
 
 # Deep Learning Params
-BATCH_SIZE = 128
 GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05

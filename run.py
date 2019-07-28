@@ -5,7 +5,6 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import gym
 from collections import namedtuple
 from itertools import count
 import random
@@ -13,22 +12,36 @@ import sys
 import time
 import matplotlib
 import matplotlib.pyplot as plt
+import math
 from torch.autograd import Variable
 
-from agent.agent import DQN
+from agent.agent import DQN, LSTM
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = "cpu"
+use_cuda = torch.cuda.is_available
+if use_cuda:
+    print('using cuda!')
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
 
-inputs = 150
-n_actions = 54+72+1 # build spots+roads+ratings+doNothing
-GAMMA = 0.8
+inputs = 129
+n_actions = 54+72+1 # build village + build roads + doNothing
+BUFFER_SIZE = 124
 
-policy_net = DQN(inputs, n_actions).to(device)
-target_net = DQN(inputs, n_actions).to(device)
-target_net.load_state_dict(policy_net.state_dict())
-target_net.eval()
-optimizer = optim.RMSprop(policy_net.parameters(),lr=0.001, momentum=0.9)
+EPS_START = 0.9  # e-greedy threshold start value
+EPS_END = 0.1  # e-greedy threshold end value
+EPS_DECAY = 100  # e-greedy threshold decay
+GAMMA = 0.8  # Q-learning discount factor
+LR = 0.1 
+steps_done = 0
+
+policy_net = LSTM(inputs,124,n_actions)
+target_net = LSTM(inputs,124,n_actions)
+if use_cuda:
+    policy_net.cuda()
+    target_net.cuda()
+
+optimizer = optim.RMSprop(policy_net.parameters(),lr=LR)
 
 plt.ion()
 
@@ -54,39 +67,39 @@ class ReplayMemory:
         return len(self.memory)
 
 
-def select_action(state, eps=0.10):
-    rand = random.uniform(0, 1)
-    if rand > eps:
-        with torch.no_grad():
-            return policy_net(state).type(torch.FloatTensor)
-            
+def select_action(state,hidden,steps_done):
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
+    steps_done += 1
+    if sample > eps_threshold:
+        out, hidden = policy_net(Variable(state),hidden)
+        return out.type(FloatTensor),hidden#.data.max(1)[1].view(1, 1), hidden
     else:
-        return torch.rand([n_actions])
+        x = FloatTensor(n_actions).uniform_().unsqueeze(0)
+        return x, None
 
 
-def optimize_model(buffer, batch_size, gamma=0.999):
+def optimize_model(buffer, batch_size):
     if len(buffer) < batch_size:
-        return
+        return buffer
 
     # random transition batch is taken from experience replay memory
     transitions = buffer.sample(batch_size)
-    batch_state, batch_action, batch_next_state, batch_reward = zip(*transitions)
+    states, actions, next_states, rewards = zip(*transitions)
+    states = Variable(torch.cat(states))
+    actions = Variable(torch.cat(actions))
+    rewards = Variable(torch.cat(rewards))
+    next_states = Variable(torch.cat(next_states))
 
-    batch_state = Variable(torch.cat(batch_state))
-    batch_action = Variable(torch.cat(batch_action))
-
-    batch_reward = Variable(torch.cat(batch_reward).view(128))
-    batch_next_state = Variable(torch.cat(batch_next_state))
-
-    # current Q values are estimated by NN for all actions
-    current_q_values = policy_net(batch_state).gather(1, batch_action.long())
-    # expected Q values are estimated from actions which gives maximum Q value
-    max_next_q_values = policy_net(batch_next_state).detach().max(1)[0]
-    expected_q_values = batch_reward + (GAMMA * max_next_q_values)
-
+    policy_out, x = policy_net(states)
+    state_action_values = policy_out.gather(1, actions)
     
-    loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze_(1))
-    #loss = F.smooth_l1_loss(current_q_values, expected_q_values)
+    
+    target_out, x = target_net(next_states)
+    next_state_values = target_out.max(1)[0].view(batch_size, 1).detach()
+    rewards = rewards.unsqueeze(1)
+    expected_q_values = rewards + (GAMMA * next_state_values)
+    loss = F.smooth_l1_loss(state_action_values, expected_q_values)
 
     # backpropagation of loss to NN
     optimizer.zero_grad()
@@ -100,7 +113,7 @@ if __name__ == "__main__":
     env.render()
     buffer = ReplayMemory(10000)
     iteration = 5000
-    num_steps = 10
+    num_steps = 30
     rewards = []
     max_reward = 0
     median = []
@@ -115,35 +128,31 @@ if __name__ == "__main__":
     plt.xlabel('Iteration')
     plt.ion()
     plt.show()    
-
+    hidden = None
     for i in range(iteration):
         env.reset()
         rewards.append(0)
         reward = 0
+        state = env.get_state()
+        steps_done = 0
         for t in range(num_steps):
             env.render()
-            state = env.get_state()
-            state = torch.FloatTensor([state])
-
-            last_state = state
-            action = select_action(state[0])
-            action = env.filter_legal_actions(action,t)
-
-            action = action.max(0).indices
+            action, h = select_action(FloatTensor([state]),hidden,i)
+            if h:
+                hidden = h
             
-            reward = env.step(action.item(),t)
-
-            
-            #if t > 2 and reward > 0:
-            #    env.remove_resources_for(action.item())
+            action = env.filter_legal_actions(action,t).max(1).indices.unsqueeze(0)
+            next_state, reward = env.step(action.item(),t)
+            print(reward)
             rewards[i] += reward
-
-            reward_t = torch.FloatTensor([reward]).view(1, 1)
-            
-            next_state = torch.FloatTensor([env.get_state()])# - last_state
-            buffer.push((state, torch.LongTensor([[action]]), next_state, reward_t))
+            reward_t = torch.tensor([reward], device='cuda:0').view(1, 1)
+            buffer.push((FloatTensor([state]),
+                         action,
+                         FloatTensor([next_state]),
+                         FloatTensor([reward_t]))                        )
             # Replay memory
-            optimize_model(buffer, 128)
+            optimize_model(buffer, BUFFER_SIZE)
+            state = next_state
             median.append(np.mean(rewards))
 
         if rewards[i] > max_reward:
@@ -160,5 +169,4 @@ if __name__ == "__main__":
             Ln2.set_xdata(range(len(median)))
 
             plt.pause(0.00001)
-
     plt.savefig('plot.png')
